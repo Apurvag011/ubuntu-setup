@@ -156,15 +156,6 @@ install_docker() {
         return 0
     fi
 
-    # Install required Ansible collections for the docker role
-    log "Installing required Ansible collections..."
-    if ! run ansible-galaxy collection install community.general ansible.posix; then
-        log_fail "Failed to install Ansible collections."
-        log_warn "If offline, install collections manually from a tarball."
-        exit 1
-    fi
-    log_ok "Ansible collections ready"
-
     # Run the playbook
     if ! (cd "$DOCKER_DIR" && run ansible-playbook site.yml); then
         log_fail "Docker installation playbook FAILED."
