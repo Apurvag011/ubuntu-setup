@@ -196,18 +196,9 @@ install_docker_compose() {
         return 0
     fi
 
-    # The compose install script hardcodes ~/docker_compose_install/
-    # Verify the folder is where $HOME expects it
-    local expected_dir="$HOME/docker_compose_install"
-    if [ "$(realpath "$COMPOSE_DIR")" != "$(realpath "$expected_dir")" ]; then
-        log_warn "Compose dir ($COMPOSE_DIR) is not at \$HOME/docker_compose_install."
-        log_warn "Creating a symlink so the install script can find it..."
-        ln -sfn "$COMPOSE_DIR" "$expected_dir"
-    fi
-
     chmod +x "$COMPOSE_DIR/install_compose_plugin.sh"
 
-    if ! run "$COMPOSE_DIR/install_compose_plugin.sh"; then
+    if ! (cd "$COMPOSE_DIR" && run ./install_compose_plugin.sh); then
         log_fail "Docker Compose installation FAILED."
         log_fail "Full log: $LOG_FILE"
         exit 1

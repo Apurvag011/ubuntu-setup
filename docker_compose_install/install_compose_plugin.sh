@@ -7,8 +7,6 @@ set -e
 
 PLUGIN_NAME="docker-compose"  # results in `docker compose` command
 
-# Path to the manually downloaded binary — use $PWD so the script works
-# regardless of where the repo is cloned (not tied to $HOME layout)
 BINARY_PATH="$PWD/docker-compose"
 
 # Verify the binary exists before doing anything
