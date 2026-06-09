@@ -1,0 +1,76 @@
+---
+# ---------------------------------------------------------------------------
+# Install Docker binaries and create required runtime directories
+# ---------------------------------------------------------------------------
+
+- name: "Install | Copy Docker binaries to {{ docker_bin_dir }}"
+  ansible.builtin.copy:
+    src: "{{ docker_extract_dir }}/{{ item }}"
+    dest: "{{ docker_bin_dir }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+    remote_src: true
+  loop: "{{ docker_binaries }}"
+  loop_control:
+    label: "{{ item }}"
+  register: _copy_result
+  failed_when: _copy_result is failed
+  notify: Restart docker
+
+- name: "Install | Create Docker and containerd runtime directories"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0711"
+  loop:
+    - "{{ docker_data_dir }}"
+    - "{{ docker_config_dir }}"
+    - "{{ containerd_data_dir }}"
+    - "{{ containerd_run_dir }}"
+    - "{{ containerd_config_dir }}"
+  register: _dir_result
+  failed_when: _dir_result is failed
+
+- name: "Install | Create 'docker' group"
+  ansible.builtin.group:
+    name: docker
+    state: present
+  register: _group_result
+  failed_when: _group_result is failed
+
+- name: "Install | Add current user ({{ ansible_env.USER }}) to 'docker' group"
+  ansible.builtin.user:
+    name: "{{ ansible_env.USER }}"
+    groups: docker
+    append: true
+  register: _user_group_result
+  failed_when: _user_group_result is failed
+
+- name: "Install | Write Docker daemon configuration"
+  ansible.builtin.copy:
+    dest: "{{ docker_config_dir }}/daemon.json"
+    content: |
+      {
+        "storage-driver": "{{ docker_storage_driver }}",
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "100m",
+          "max-file": "3"
+        }
+      }
+    owner: root
+    group: root
+    mode: "0644"
+  register: _daemon_json
+  failed_when: _daemon_json is failed
+  notify: Restart docker
+
+- name: "Install | Clean up temporary extraction directory"
+  ansible.builtin.file:
+    path: "{{ docker_extract_dir }}"
+    state: absent
+  register: _cleanup
+  failed_when: _cleanup is failed

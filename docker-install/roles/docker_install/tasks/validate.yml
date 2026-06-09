@@ -1,0 +1,118 @@
+---
+# ---------------------------------------------------------------------------
+# Start services in the correct order and validate the installation
+# ---------------------------------------------------------------------------
+
+- name: "Service | Enable and start containerd"
+  ansible.builtin.systemd:
+    name: containerd
+    state: started
+    enabled: true
+    daemon_reload: true
+  register: _containerd_svc
+  failed_when: _containerd_svc is failed
+
+- name: "Service | Confirm containerd is active"
+  ansible.builtin.command:
+    cmd: systemctl is-active containerd
+  register: _containerd_active
+  changed_when: false
+  failed_when: _containerd_active.stdout != "active"
+
+- name: "Service | Fail with diagnostics if containerd did not start"
+  ansible.builtin.fail:
+    msg: >-
+      containerd.service is not active (status: {{ _containerd_active.stdout }}).
+      Run: journalctl -xeu containerd.service --no-pager | tail -30
+  when: _containerd_active.stdout != "active"
+
+- name: "Service | Enable and start docker.socket"
+  ansible.builtin.systemd:
+    name: docker.socket
+    state: started
+    enabled: true
+  register: _socket_svc
+  failed_when: _socket_svc is failed
+
+- name: "Service | Enable and start docker"
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+  register: _docker_svc
+  failed_when: _docker_svc is failed
+
+- name: "Service | Confirm docker.service is active"
+  ansible.builtin.command:
+    cmd: systemctl is-active docker
+  register: _docker_active
+  changed_when: false
+  failed_when: _docker_active.stdout != "active"
+
+- name: "Service | Fail with diagnostics if docker did not start"
+  ansible.builtin.fail:
+    msg: >-
+      docker.service is not active (status: {{ _docker_active.stdout }}).
+      Run: journalctl -xeu docker.service --no-pager | tail -30
+  when: _docker_active.stdout != "active"
+
+- name: "Validate | Confirm /var/run/docker.sock exists and is a socket"
+  ansible.builtin.stat:
+    path: /var/run/docker.sock
+  register: _sock_stat
+  changed_when: false
+
+- name: "Validate | Fail if docker socket is absent or wrong type"
+  ansible.builtin.fail:
+    msg: >-
+      /var/run/docker.sock does not exist or is not a socket.
+      Check docker.socket unit: systemctl status docker.socket
+  when: not _sock_stat.stat.exists or _sock_stat.stat.issock is not defined or not _sock_stat.stat.issock
+
+- name: "Validate | Run 'docker version' to confirm CLI can reach daemon"
+  ansible.builtin.command:
+    cmd: /usr/local/bin/docker version --format '{% raw %}{{.Server.Version}}{% endraw %}'
+  register: _docker_version
+  changed_when: false
+  become: true
+  failed_when: _docker_version.rc != 0
+
+- name: "Validate | Fail if docker version could not be retrieved"
+  ansible.builtin.fail:
+    msg: >-
+      'docker version' returned a non-zero exit code.
+      The CLI cannot reach the daemon via the socket.
+      Error output: {{ _docker_version.stderr }}
+  when: _docker_version.rc != 0
+
+- name: "Validate | Run 'docker info' to confirm storage driver"
+  ansible.builtin.command:
+    cmd: /usr/local/bin/docker info --format '{% raw %}{{.Driver}}{% endraw %}'
+  register: _docker_info
+  changed_when: false
+  become: true
+  failed_when: _docker_info.rc != 0
+
+- name: "Validate | Fail if storage driver is not overlay2"
+  ansible.builtin.fail:
+    msg: >-
+      Expected storage driver 'overlay2' but got '{{ _docker_info.stdout }}'.
+      Check /etc/docker/daemon.json and that the overlay kernel module is loaded.
+  when: _docker_info.stdout | trim != "overlay2"
+
+- name: "Validate | Installation complete — print summary"
+  ansible.builtin.debug:
+    msg:
+      - "========================================"
+      - " Docker installation complete"
+      - "========================================"
+      - "Docker version  : {{ _docker_version.stdout | trim }}"
+      - "Storage driver  : {{ _docker_info.stdout | trim }}"
+      - "Socket          : /var/run/docker.sock"
+      - "containerd      : active"
+      - "docker          : active"
+      - ""
+      - "NOTE: Log out and back in (or run 'newgrp docker') for"
+      - "'docker' group membership to take effect for"
+      - "user '{{ ansible_env.USER }}'."
+      - "========================================"

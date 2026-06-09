@@ -1,0 +1,6 @@
+.DS_Store
+
+# Large binary/offline installer files — download separately
+ansible_install/*.tar.gz
+docker-install/files/*.tgz
+docker_compose_install/docker-compose

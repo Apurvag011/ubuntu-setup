@@ -1,0 +1,9 @@
+---
+- name: "Install Docker Engine from local tarball (air-gapped)"
+  hosts: docker_hosts
+  become: true
+  gather_facts: true
+
+  # Override defaults via -e on the CLI, e.g: -e "docker_tar_src=/other/path.tgz"
+  roles:
+    - role: docker_install

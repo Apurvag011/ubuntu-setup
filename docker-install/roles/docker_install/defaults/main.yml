@@ -1,0 +1,42 @@
+---
+# Path to the Docker tarball — defaults to files/docker.tgz shipped with this project.
+# Override via -e docker_tar_src=/your/path if needed.
+docker_tar_src: "{{ playbook_dir }}/files/docker-29.5.3.tgz"
+
+# Where to extract the tarball temporarily
+docker_extract_dir: "/tmp/docker-install"
+
+# Final binary destination
+docker_bin_dir: "/usr/local/bin"
+
+# Runtime directories
+docker_data_dir: "/var/lib/docker"
+docker_config_dir: "/etc/docker"
+containerd_data_dir: "/var/lib/containerd"
+containerd_run_dir: "/run/containerd"
+containerd_config_dir: "/etc/containerd"
+
+# Docker daemon options
+docker_storage_driver: "overlay2"
+
+# Kernel modules required
+docker_kernel_modules:
+  - overlay
+  - br_netfilter
+
+# Sysctl parameters required for container networking
+docker_sysctl_params:
+  net.ipv4.ip_forward: "1"
+  net.bridge.bridge-nf-call-iptables: "1"
+  net.bridge.bridge-nf-call-ip6tables: "1"
+
+# All binaries expected in the tarball
+docker_binaries:
+  - docker
+  - dockerd
+  - containerd
+  - containerd-shim-runc-v2
+  - ctr
+  - runc
+  - docker-proxy
+  - docker-init

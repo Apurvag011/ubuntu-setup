@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  role_name: docker_install
+  description: Installs Docker Engine from a local tarball (air-gapped)
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy

@@ -1,0 +1,101 @@
+---
+# ---------------------------------------------------------------------------
+# Systemd unit files for containerd, docker.socket, and docker.service
+# ---------------------------------------------------------------------------
+
+- name: "Systemd | Install containerd.service unit"
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/containerd.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=containerd container runtime
+      Documentation=https://containerd.io
+      After=network.target
+
+      [Service]
+      ExecStartPre=-/sbin/modprobe overlay
+      ExecStart=/usr/local/bin/containerd
+      Type=notify
+      Delegate=yes
+      KillMode=process
+      Restart=always
+      RestartSec=5
+      LimitNOFILE=1048576
+      LimitNPROC=infinity
+      LimitCORE=infinity
+      TasksMax=infinity
+      OOMScoreAdjust=-999
+
+      [Install]
+      WantedBy=multi-user.target
+  register: _containerd_unit
+  failed_when: _containerd_unit is failed
+  notify: Reload systemd
+
+- name: "Systemd | Install docker.socket unit"
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/docker.socket
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Docker Socket for the API
+
+      [Socket]
+      ListenStream=/var/run/docker.sock
+      SocketMode=0660
+      SocketUser=root
+      SocketGroup=docker
+
+      [Install]
+      WantedBy=sockets.target
+  register: _socket_unit
+  failed_when: _socket_unit is failed
+  notify: Reload systemd
+
+- name: "Systemd | Install docker.service unit"
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/docker.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Docker Application Container Engine
+      Documentation=https://docs.docker.com
+      After=network-online.target containerd.service
+      Requires=containerd.service
+      Wants=network-online.target docker.socket
+
+      [Service]
+      Type=notify
+      ExecStart=/usr/local/bin/dockerd \
+        --host=fd:// \
+        --containerd=/run/containerd/containerd.sock
+      ExecReload=/bin/kill -s HUP $MAINPID
+      TimeoutStartSec=0
+      RestartSec=2
+      Restart=always
+      StartLimitBurst=3
+      StartLimitInterval=60s
+      LimitNOFILE=infinity
+      LimitNPROC=infinity
+      LimitCORE=infinity
+      TasksMax=infinity
+      Delegate=yes
+      KillMode=process
+      OOMScoreAdjust=-500
+
+      [Install]
+      WantedBy=multi-user.target
+
+  register: _docker_unit
+  failed_when: _docker_unit is failed
+  notify: Reload systemd
+
+- name: "Systemd | Reload daemon if any unit file changed"
+  ansible.builtin.meta: flush_handlers

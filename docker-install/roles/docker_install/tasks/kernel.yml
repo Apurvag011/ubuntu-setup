@@ -1,0 +1,77 @@
+---
+# ---------------------------------------------------------------------------
+# Kernel preparation — must be done before starting any Docker services
+# ---------------------------------------------------------------------------
+
+- name: "Kernel | Load required kernel modules"
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ docker_kernel_modules }}"
+  register: _modprobe_result
+  failed_when: _modprobe_result is failed
+  changed_when: _modprobe_result is changed
+
+- name: "Kernel | Persist kernel modules across reboots"
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/docker.conf
+    content: |
+      # Loaded by docker_install Ansible role
+      overlay
+      br_netfilter
+    owner: root
+    group: root
+    mode: "0644"
+  register: _modules_persist
+  failed_when: _modules_persist is failed
+
+- name: "Kernel | Apply sysctl parameters for container networking"
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_file: /etc/sysctl.d/99-docker.conf
+    reload: true
+  loop: "{{ docker_sysctl_params | dict2items }}"
+  loop_control:
+    label: "{{ item.key }} = {{ item.value }}"
+  register: _sysctl_result
+  failed_when: _sysctl_result is failed
+
+- name: "Kernel | Confirm overlay module is actually loaded"
+  ansible.builtin.command:
+    cmd: lsmod
+  register: _lsmod
+  changed_when: false
+  failed_when: _lsmod.rc != 0
+
+- name: "Kernel | Fail if overlay module did not load"
+  ansible.builtin.fail:
+    msg: >-
+      The 'overlay' kernel module could not be confirmed as loaded.
+      Container storage driver (overlay2) will not work.
+      Check 'lsmod | grep overlay' on the target host.
+  when: "'overlay' not in _lsmod.stdout"
+
+- name: "Kernel | Confirm br_netfilter module is actually loaded"
+  ansible.builtin.fail:
+    msg: >-
+      The 'br_netfilter' kernel module could not be confirmed as loaded.
+      Bridge network filtering for containers will not work.
+      Check 'lsmod | grep br_netfilter' on the target host.
+  when: "'br_netfilter' not in _lsmod.stdout"
+
+- name: "Kernel | Confirm ip_forward is active"
+  ansible.builtin.command:
+    cmd: sysctl net.ipv4.ip_forward
+  register: _ip_forward
+  changed_when: false
+  failed_when: _ip_forward.rc != 0
+
+- name: "Kernel | Fail if ip_forward is not enabled"
+  ansible.builtin.fail:
+    msg: >-
+      net.ipv4.ip_forward is not set to 1.
+      Container network routing will not work.
+      Value seen: {{ _ip_forward.stdout }}
+  when: "'= 1' not in _ip_forward.stdout"

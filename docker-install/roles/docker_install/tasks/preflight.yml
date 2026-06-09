@@ -1,0 +1,70 @@
+---
+# ---------------------------------------------------------------------------
+# Pre-flight: fail fast before touching anything on the target host
+# ---------------------------------------------------------------------------
+
+- name: "Preflight | Verify OS is Ubuntu Jammy (22.04)"
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_version == "22.04"
+    fail_msg: >-
+      This role requires Ubuntu 22.04 (Jammy). Detected:
+      {{ ansible_distribution }} {{ ansible_distribution_version }}.
+      Aborting.
+    success_msg: "OS check passed — Ubuntu 22.04 Jammy confirmed."
+
+- name: "Preflight | Verify Docker tarball exists on target host"
+  ansible.builtin.stat:
+    path: "{{ docker_tar_src }}"
+  register: _tar_stat
+  failed_when: not _tar_stat.stat.exists
+  changed_when: false
+
+- name: "Preflight | Fail with clear message if tarball is missing"
+  ansible.builtin.fail:
+    msg: >-
+      Docker tarball not found at {{ docker_tar_src }}.
+      Copy the tarball to the target host before running this role.
+  when: not _tar_stat.stat.exists
+
+- name: "Preflight | Verify tarball is not empty (size > 0)"
+  ansible.builtin.assert:
+    that:
+      - _tar_stat.stat.size > 0
+    fail_msg: "Tarball at {{ docker_tar_src }} exists but is empty (0 bytes). Aborting."
+    success_msg: "Tarball size check passed ({{ _tar_stat.stat.size }} bytes)."
+
+- name: "Preflight | Create temporary extraction directory"
+  ansible.builtin.file:
+    path: "{{ docker_extract_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: "Preflight | Extract Docker tarball to inspect contents"
+  ansible.builtin.unarchive:
+    src: "{{ docker_tar_src }}"
+    dest: "{{ docker_extract_dir }}"
+    remote_src: true
+    extra_opts:
+      - "--strip-components=1"
+  register: _unarchive_result
+  failed_when: _unarchive_result is failed
+
+- name: "Preflight | Stat each expected binary in extracted tarball"
+  ansible.builtin.stat:
+    path: "{{ docker_extract_dir }}/{{ item }}"
+  register: _binary_stats
+  loop: "{{ docker_binaries }}"
+  changed_when: false
+
+- name: "Preflight | Fail if any required binary is missing from tarball"
+  ansible.builtin.fail:
+    msg: >-
+      Required binary '{{ item.item }}' not found in tarball after extraction
+      (checked: {{ docker_extract_dir }}/{{ item.item }}).
+      Verify you have the correct Docker static binary tarball.
+  when: not item.stat.exists
+  loop: "{{ _binary_stats.results }}"
+  loop_control:
+    label: "{{ item.item }}"
