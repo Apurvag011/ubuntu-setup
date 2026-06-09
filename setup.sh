@@ -130,7 +130,7 @@ install_ansible() {
     fi
 
     # The installer looks for the tarball in its own directory
-    if ! (cd "$ANSIBLE_DIR" && run sudo python3 install_ansible.py); then
+    if ! (cd "$ANSIBLE_DIR" && run sudo python3 -u install_ansible.py); then
         log_fail "Ansible installation FAILED."
         log_fail "Full log: $LOG_FILE"
         exit 1
